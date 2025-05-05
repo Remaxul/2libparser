@@ -1,18 +1,19 @@
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs').promises;
+const http = require('http');
+const path = require('path');
 
-// Настройки Telegram
-const TELEGRAM_TOKEN = '7552508743:AAEmGQw499vk_94gzzbHh4drkZdsd45Zz9Q'; // Замени на токен твоего бота
-const TELEGRAM_CHANNEL_ID = '-1002619055628'; // Замени на ID твоего канала
+// Тг
+const TELEGRAM_TOKEN = '7552508743:AAEmGQw499vk_94gzzbHh4drkZdsd45Zz9Q'; // Заменить
+const TELEGRAM_CHANNEL_ID = '-1002619055628'; // Заменить
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
-// Функция для получения текущего времени в формате ГГГГ-ММ-ДД ЧЧ:ММ:СС
+// Время в отладочных сообщ
 function getFormattedTime() {
   const now = new Date();
   return now.toISOString().replace('T', ' ').split('.')[0];
 }
 
-// Функция для получения коллекций с указанной страницы
 async function getNPageCollection(pageNum, apiUrl, headers) {
   try {
     const resp = await fetch(`${apiUrl}?limit=24&page=${pageNum}&sort_by=newest`, {
@@ -33,7 +34,6 @@ async function getNPageCollection(pageNum, apiUrl, headers) {
   }
 }
 
-// Функция для проверки существования файла
 async function fileExists(filePath) {
   try {
     await fs.access(filePath);
@@ -43,7 +43,6 @@ async function fileExists(filePath) {
   }
 }
 
-// Функция для чтения tracked_ids.json
 async function readTrackedIds() {
   try {
     const data = await fs.readFile('tracked_ids.json', 'utf8');
@@ -54,7 +53,6 @@ async function readTrackedIds() {
   }
 }
 
-// Функция для сохранения данных в файл
 async function saveCollectionsToFile(collections, filename) {
   try {
     await fs.writeFile(filename, JSON.stringify(collections, null, 2));
@@ -64,7 +62,6 @@ async function saveCollectionsToFile(collections, filename) {
   }
 }
 
-// Функция для сохранения tracked_ids.json
 async function saveTrackedIds(ids, maxId) {
   try {
     await fs.writeFile('tracked_ids.json', JSON.stringify({ ids, maxId }, null, 2));
@@ -74,7 +71,6 @@ async function saveTrackedIds(ids, maxId) {
   }
 }
 
-// Функция для отправки уведомления в Telegram
 async function sendTelegramNotification(collection, site) {
   const url = site === 'mangalib' 
     ? `https://mangalib.me/ru/collections/${collection.id}`
@@ -92,7 +88,6 @@ async function sendTelegramNotification(collection, site) {
   }
 }
 
-// Функция для полного парсинга всех страниц для одного сайта
 async function parseAllCollections(apiUrl, headers, outputFile) {
   const allCollections = [];
   let page = 1;
@@ -123,7 +118,7 @@ async function parseAllCollections(apiUrl, headers, outputFile) {
   return allCollections;
 }
 
-// Функция для парсинга 20 самых новых ID для одного сайта
+// 20 айди с каждого сайта для сравнения
 async function parseTop20Collections(apiUrl, headers, site) {
   const collections = [];
   let page = 1;
@@ -149,11 +144,49 @@ async function parseTop20Collections(apiUrl, headers, site) {
   }));
 }
 
-// Основная функция для парсинга и обработки
+// HTTP-сервер
+const server = http.createServer(async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+
+  const routes = {
+    '/mangalib': 'mangalib_collections.json',
+    '/shlib': 'shlib_collections.json',
+    '/tracked': 'tracked_ids.json'
+  };
+
+  const filePath = routes[req.url];
+
+  if (filePath) {
+    try {
+      const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+      if (!fileExists) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: `File ${filePath} not found` }));
+        return;
+      }
+
+      const data = await fs.readFile(filePath, 'utf8');
+      res.statusCode = 200;
+      res.end(data);
+    } catch (error) {
+      console.error(`${getFormattedTime()} Ошибка при чтении файла ${filePath}: ${error.message}`);
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: 'Internal server error' }));
+    }
+  } else {
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'Route not found' }));
+  }
+});
+
+// Запуск, порт 3000
+server.listen(3000, () => {
+  console.log(`${getFormattedTime()} HTTP-сервер запущен на порту 3000`);
+});
+
 async function parseAndProcess() {
   console.log(`${getFormattedTime()} Запуск парсинга...`);
 
-  // Параметры для mangalib.me
   const mangalibConfig = {
     apiUrl: 'https://api.cdnlibs.org/api/collections',
     headers: {
@@ -166,7 +199,6 @@ async function parseAndProcess() {
     site: 'mangalib',
   };
 
-  // Параметры для v2.shlib.life
   const shlibConfig = {
     apiUrl: 'https://v2.shlib.life/api/collections',
     headers: {
@@ -178,31 +210,27 @@ async function parseAndProcess() {
     site: 'shlib',
   };
 
-  // Полный парсинг обоих сайтов
   console.log(`${getFormattedTime()} Начинаем полный парсинг mangalib.me...`);
   const mangalibCollections = await parseAllCollections(mangalibConfig.apiUrl, mangalibConfig.headers, mangalibConfig.outputFile);
   
   console.log(`${getFormattedTime()} Начинаем полный парсинг v2.shlib.life...`);
   const shlibCollections = await parseAllCollections(shlibConfig.apiUrl, shlibConfig.headers, shlibConfig.outputFile);
 
-  // Парсинг 20 самых новых коллекций
   console.log(`${getFormattedTime()} Начинаем парсинг топ 20 для mangalib.me...`);
   const mangalibTop20 = await parseTop20Collections(mangalibConfig.apiUrl, mangalibConfig.headers, mangalibConfig.site);
   
   console.log(`${getFormattedTime()} Начинаем парсинг топ 20 для v2.shlib.life...`);
   const shlibTop20 = await parseTop20Collections(shlibConfig.apiUrl, shlibConfig.headers, shlibConfig.site);
 
-  // Объединяем топ 20 коллекций, отдавая приоритет mangalib.me для дубликатов
+  // Объединение 20 коллекц., приоритет - mangalib.me в отбивке тг, только для дубликатов
   const allTopCollections = [];
   const seenIds = new Set();
 
-  // Сначала добавляем коллекции с mangalib.me
   for (const collection of mangalibTop20) {
     allTopCollections.push(collection);
     seenIds.add(collection.id);
   }
 
-  // Добавляем коллекции с shlib.life, только если ID ещё не встречался
   for (const collection of shlibTop20) {
     if (!seenIds.has(collection.id)) {
       allTopCollections.push(collection);
@@ -210,18 +238,14 @@ async function parseAndProcess() {
     }
   }
 
-  // Извлекаем ID, удаляем дубликаты (хотя они уже обработаны)
   const currentIds = [...new Set(allTopCollections.map(c => c.id))];
   const collectionsById = Object.fromEntries(allTopCollections.map(c => [c.id, c]));
 
-  // Читаем предыдущие ID и maxId
   const isFirstRun = !(await fileExists('tracked_ids.json'));
   const { ids: previousIds, maxId: previousMaxId } = await readTrackedIds();
 
-  // Находим новые ID, которые больше предыдущего максимума
   const newIds = currentIds.filter(id => id > previousMaxId && !previousIds.includes(id));
 
-  // Отправляем уведомления, только если это не первый запуск
   if (!isFirstRun) {
     for (const id of newIds) {
       const collection = collectionsById[id];
@@ -229,18 +253,14 @@ async function parseAndProcess() {
     }
   }
 
-  // Обновляем список ID, убирая дубликаты
   const updatedIds = [...new Set([...previousIds, ...currentIds])];
   const newMaxId = Math.max(...updatedIds, previousMaxId);
 
-  // Сохраняем обновлённый список
   await saveTrackedIds(updatedIds, newMaxId);
 
   console.log(`${getFormattedTime()} Парсинг завершён. Первый запуск: ${isFirstRun}, Новых ID: ${newIds.length}, Всего ID: ${updatedIds.length}, Макс. ID: ${newMaxId}`);
 }
 
-// Запускаем парсинг каждую минуту
 setInterval(parseAndProcess, 60 * 1000);
 
-// Выполняем первый запуск сразу
 parseAndProcess();
