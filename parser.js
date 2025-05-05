@@ -72,15 +72,15 @@ async function saveTrackedIds(ids, maxId) {
 }
 
 async function sendTelegramNotification(collection, site) {
-  const url = site === 'mangalib' 
+  const url = site === 'mangalib'
     ? `https://mangalib.me/ru/collections/${collection.id}`
     : `https://v2.shlib.life/ru/collections/${collection.id}`;
   const siteName = site === 'mangalib' ? 'Mangalib' : 'Shlib';
   const message = `Новая коллекция: *${collection.name}*\nСайт: ${siteName}\nСсылка: ${url}`;
   try {
-    await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, { 
+    await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
       parse_mode: 'Markdown',
-      disable_web_page_preview: true 
+      disable_web_page_preview: true
     });
     console.log(`${getFormattedTime()} Уведомление отправлено для коллекции ${collection.id}`);
   } catch (error) {
@@ -147,7 +147,8 @@ async function parseTop20Collections(apiUrl, headers, site) {
 // HTTP-сервер
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
-
+  res.setHeader("Access-Control-Allow-Headers", "*")
+  res.setHeader("Access-Control-Allow-Headers", "origin, content-type, accept")
   const routes = {
     '/mangalib': 'mangalib_collections.json',
     '/shlib': 'shlib_collections.json',
@@ -212,13 +213,13 @@ async function parseAndProcess() {
 
   console.log(`${getFormattedTime()} Начинаем полный парсинг mangalib.me...`);
   const mangalibCollections = await parseAllCollections(mangalibConfig.apiUrl, mangalibConfig.headers, mangalibConfig.outputFile);
-  
+
   console.log(`${getFormattedTime()} Начинаем полный парсинг v2.shlib.life...`);
   const shlibCollections = await parseAllCollections(shlibConfig.apiUrl, shlibConfig.headers, shlibConfig.outputFile);
 
   console.log(`${getFormattedTime()} Начинаем парсинг топ 20 для mangalib.me...`);
   const mangalibTop20 = await parseTop20Collections(mangalibConfig.apiUrl, mangalibConfig.headers, mangalibConfig.site);
-  
+
   console.log(`${getFormattedTime()} Начинаем парсинг топ 20 для v2.shlib.life...`);
   const shlibTop20 = await parseTop20Collections(shlibConfig.apiUrl, shlibConfig.headers, shlibConfig.site);
 
