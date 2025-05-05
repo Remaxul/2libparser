@@ -147,14 +147,13 @@ async function parseTop20Collections(apiUrl, headers, site) {
 // HTTP-сервер
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Разрешить запросы с любого источника
-  res.setHeader('Access-Control-Allow-Methods', 'GET'); // Разрешить GET
-  // Для предзапросов OPTIONS (если нужны)
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
+  res.setHeader("Access-Control-Allow-Headers", "*")
+  res.setHeader("Access-Control-Allow-Headers", "origin, content-type, accept")
+  const routes = {
+    '/mangalib': 'mangalib_collections.json',
+    '/shlib': 'shlib_collections.json',
+    '/tracked': 'tracked_ids.json'
+  };
 
   const filePath = routes[req.url];
 
