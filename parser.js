@@ -2,8 +2,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs').promises;
 
 // Настройки Telegram
-const TELEGRAM_TOKEN = '7875890659:AAFqkDJFpoOF68T58_z84IEsi9OHDxER_kU'; // Замени на токен твоего бота
-const TELEGRAM_CHANNEL_ID = '-1002589466518'; // Замени на ID твоего канала
+const TELEGRAM_TOKEN = '7552508743:AAEmGQw499vk_94gzzbHh4drkZdsd45Zz9Q'; // Замени на токен твоего бота
+const TELEGRAM_CHANNEL_ID = '-1002619055628'; // Замени на ID твоего канала
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 // Функция для получения текущего времени в формате ГГГГ-ММ-ДД ЧЧ:ММ:СС
