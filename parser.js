@@ -8,7 +8,11 @@ const TELEGRAM_TOKEN = '7552508743:AAEmGQw499vk_94gzzbHh4drkZdsd45Zz9Q'; // За
 const TELEGRAM_CHANNEL_ID = '-1002619055628'; // Заменить
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
-// Время в отладочных сообщ
+// Конфигурация уведомлений
+const ENABLE_MANGALIB_NOTIFICATIONS = true; // Измени на false, чтобы отключить уведомления для mangalib
+const ENABLE_SHLIB_NOTIFICATIONS = false; // Измени на false, чтобы отключить уведомления для shlib
+
+// Время в отладочных сообщениях
 function getFormattedTime() {
   const now = new Date();
   return now.toISOString().replace('T', ' ').split('.')[0];
@@ -78,11 +82,16 @@ async function sendTelegramNotification(collection, site) {
   const siteName = site === 'mangalib' ? 'Mangalib' : 'Shlib';
   const message = `Новая коллекция: *${collection.name}*\nСайт: ${siteName}\nСсылка: ${url}`;
   try {
-    await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true
-    });
-    console.log(`${getFormattedTime()} Уведомление отправлено для коллекции ${collection.id}`);
+    // Отправляем уведомление только если включено для данного сайта
+    if ((site === 'mangalib' && ENABLE_MANGALIB_NOTIFICATIONS) || (site === 'shlib' && ENABLE_SHLIB_NOTIFICATIONS)) {
+      await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true
+      });
+      console.log(`${getFormattedTime()} Уведомление отправлено для коллекции ${collection.id} (сайт: ${siteName})`);
+    } else {
+      console.log(`${getFormattedTime()} Уведомление для коллекции ${collection.id} (сайт: ${siteName}) пропущено (отключено)`);
+    }
   } catch (error) {
     console.error(`${getFormattedTime()} Ошибка при отправке уведомления в Telegram: ${error.message}`);
   }
@@ -147,8 +156,9 @@ async function parseTop20Collections(apiUrl, headers, site) {
 // HTTP-сервер
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader("Access-Control-Allow-Headers", "*")
-  res.setHeader("Access-Control-Allow-Headers", "origin, content-type, accept")
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Разрешить CORS
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'origin, content-type, accept');
   const routes = {
     '/mangalib': 'mangalib_collections.json',
     '/shlib': 'shlib_collections.json',
@@ -180,8 +190,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Запуск, порт 3000
-server.listen(3000, () => {
+server.listen(3000, '0.0.0.0', () => { // Явно указываем IPv4
   console.log(`${getFormattedTime()} HTTP-сервер запущен на порту 3000`);
 });
 
@@ -223,7 +232,7 @@ async function parseAndProcess() {
   console.log(`${getFormattedTime()} Начинаем парсинг топ 20 для v2.shlib.life...`);
   const shlibTop20 = await parseTop20Collections(shlibConfig.apiUrl, shlibConfig.headers, shlibConfig.site);
 
-  // Объединение 20 коллекц., приоритет - mangalib.me в отбивке тг, только для дубликатов
+  // Объединение 20 коллекций с приоритетом mangalib → shlib
   const allTopCollections = [];
   const seenIds = new Set();
 
@@ -250,7 +259,12 @@ async function parseAndProcess() {
   if (!isFirstRun) {
     for (const id of newIds) {
       const collection = collectionsById[id];
-      await sendTelegramNotification(collection, collection.site);
+      // Приоритет: если mangalib отключён, но shlib включён, отправляем от shlib
+      if (ENABLE_MANGALIB_NOTIFICATIONS || (collection.site === 'shlib' && ENABLE_SHLIB_NOTIFICATIONS)) {
+        await sendTelegramNotification(collection, collection.site === 'mangalib' && !ENABLE_MANGALIB_NOTIFICATIONS && ENABLE_SHLIB_NOTIFICATIONS ? 'shlib' : collection.site);
+      } else {
+        console.log(`${getFormattedTime()} Уведомление для коллекции ${collection.id} пропущено (оба сайта отключены)`);
+      }
     }
   }
 
