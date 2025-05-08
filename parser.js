@@ -4,8 +4,8 @@ const http = require('http');
 const path = require('path');
 
 // Тг
-const TELEGRAM_TOKEN = '7552508743:AAEmGQw499vk_94gzzbHh4drkZdsd45Zz9Q'; // Заменить
-const TELEGRAM_CHANNEL_ID = '-1002619055628'; // Заменить
+const TELEGRAM_TOKEN = '7875890659:AAFqkDJFpoOF68T58_z84IEsi9OHDxER_kU'; // Заменить
+const TELEGRAM_CHANNEL_ID = '-1002589466518'; // Заменить
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 // Конфигурация уведомлений
@@ -50,7 +50,8 @@ async function fileExists(filePath) {
 async function readTrackedIds() {
   try {
     const data = await fs.readFile('tracked_ids.json', 'utf8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return { ids: [], maxId: parsed.maxId || 0 }; // Возвращаем только maxId, ids формируем заново
   } catch (error) {
     console.error(`${getFormattedTime()} Ошибка при чтении tracked_ids.json: ${error.message}`);
     return { ids: [], maxId: 0 };
@@ -82,7 +83,6 @@ async function sendTelegramNotification(collection, site) {
   const siteName = site === 'mangalib' ? 'Mangalib' : 'Shlib';
   const message = `Новая коллекция: *${collection.name}*\nСайт: ${siteName}\nСсылка: ${url}`;
   try {
-    // Отправляем уведомление только если включено для данного сайта
     if ((site === 'mangalib' && ENABLE_MANGALIB_NOTIFICATIONS) || (site === 'shlib' && ENABLE_SHLIB_NOTIFICATIONS)) {
       await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
         parse_mode: 'Markdown',
@@ -127,7 +127,6 @@ async function parseAllCollections(apiUrl, headers, outputFile) {
   return allCollections;
 }
 
-// 20 айди с каждого сайта для сравнения
 async function parseTop20Collections(apiUrl, headers, site) {
   const collections = [];
   let page = 1;
@@ -156,7 +155,7 @@ async function parseTop20Collections(apiUrl, headers, site) {
 // HTTP-сервер
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Разрешить CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', 'origin, content-type, accept');
   const routes = {
@@ -190,7 +189,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(3000, '0.0.0.0', () => { // Явно указываем IPv4
+server.listen(3000, '0.0.0.0', () => {
   console.log(`${getFormattedTime()} HTTP-сервер запущен на порту 3000`);
 });
 
@@ -252,14 +251,13 @@ async function parseAndProcess() {
   const collectionsById = Object.fromEntries(allTopCollections.map(c => [c.id, c]));
 
   const isFirstRun = !(await fileExists('tracked_ids.json'));
-  const { ids: previousIds, maxId: previousMaxId } = await readTrackedIds();
+  const { maxId: previousMaxId } = await readTrackedIds();
 
-  const newIds = currentIds.filter(id => id > previousMaxId && !previousIds.includes(id));
+  const newIds = currentIds.filter(id => id > previousMaxId);
 
   if (!isFirstRun) {
     for (const id of newIds) {
       const collection = collectionsById[id];
-      // Приоритет: если mangalib отключён, но shlib включён, отправляем от shlib
       if (ENABLE_MANGALIB_NOTIFICATIONS || (collection.site === 'shlib' && ENABLE_SHLIB_NOTIFICATIONS)) {
         await sendTelegramNotification(collection, collection.site === 'mangalib' && !ENABLE_MANGALIB_NOTIFICATIONS && ENABLE_SHLIB_NOTIFICATIONS ? 'shlib' : collection.site);
       } else {
@@ -268,12 +266,10 @@ async function parseAndProcess() {
     }
   }
 
-  const updatedIds = [...new Set([...previousIds, ...currentIds])];
-  const newMaxId = Math.max(...updatedIds, previousMaxId);
+  const newMaxId = Math.max(...currentIds, previousMaxId);
+  await saveTrackedIds(currentIds, newMaxId);
 
-  await saveTrackedIds(updatedIds, newMaxId);
-
-  console.log(`${getFormattedTime()} Парсинг завершён. Первый запуск: ${isFirstRun}, Новых ID: ${newIds.length}, Всего ID: ${updatedIds.length}, Макс. ID: ${newMaxId}`);
+  console.log(`${getFormattedTime()} Парсинг завершён. Первый запуск: ${isFirstRun}, Новых ID: ${newIds.length}, Всего ID: ${currentIds.length}, Макс. ID: ${newMaxId}`);
 }
 
 setInterval(parseAndProcess, 60 * 1000);
