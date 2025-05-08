@@ -4,8 +4,8 @@ const http = require('http');
 const path = require('path');
 
 // Тг
-const TELEGRAM_TOKEN = '7875890659:AAFqkDJFpoOF68T58_z84IEsi9OHDxER_kU'; // Заменить
-const TELEGRAM_CHANNEL_ID = '-1002589466518'; // Заменить
+const TELEGRAM_TOKEN = '7552508743:AAEmGQw499vk_94gzzbHh4drkZdsd45Zz9Q'; // Заменить
+const TELEGRAM_CHANNEL_ID = '-1002619055628'; // Заменить
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 // Конфигурация уведомлений
